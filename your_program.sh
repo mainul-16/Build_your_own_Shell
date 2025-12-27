@@ -1,25 +1,16 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 while true; do
   printf "$ "
-  read -r line || exit 0
-
-  # Ignore empty input
-  [ -z "$line" ] && continue
-
-  # Split input into words
-  set -- $line
-
-  cmd="$1"
-  shift
+  read -r cmd args || exit 0
 
   if [ "$cmd" = "exit" ]; then
     exit 0
 
   elif [ "$cmd" = "echo" ]; then
-    printf "%s\n" "$*"
+    printf "%s\n" "$args"
 
-  else
+  elif [ -n "$cmd" ]; then
     printf "%s: command not found\n" "$cmd"
   fi
 done

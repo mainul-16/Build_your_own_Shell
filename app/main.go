@@ -13,17 +13,32 @@ func main() {
 	for {
 		fmt.Print("$ ")
 
-		command, err := reader.ReadString('\n')
+		line, err := reader.ReadString('\n')
 		if err != nil {
-			os.Exit(0)
+			return
 		}
 
-		command = strings.TrimSpace(command)
+		line = strings.TrimSpace(line)
 
-		if command == "exit" {
-			os.Exit(0)
+		// exit builtin
+		if line == "exit" {
+			return
 		}
 
-		fmt.Println(command + ": command not found")
+		// echo builtin
+		if strings.HasPrefix(line, "echo") {
+			if len(line) > 4 {
+				fmt.Println(strings.TrimPrefix(line, "echo "))
+			} else {
+				fmt.Println()
+			}
+			continue
+		}
+
+		// unknown command
+		if line != "" {
+			cmd := strings.Fields(line)[0]
+			fmt.Printf("%s: command not found\n", cmd)
+		}
 	}
 }

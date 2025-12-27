@@ -4,8 +4,7 @@
 #
 # This runs before .codecrafters/run.sh
 #
-# Learn more: https://codecrafters.io/program-interface
 
-set -e # Exit on failure
+set -e
 
-go build -o /tmp/codecrafters-build-shell-go app/*.go
+go build -o /tmp/codecrafters-build-shell-go .

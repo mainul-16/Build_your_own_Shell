@@ -1,11 +1,4 @@
-#!/bin/sh
-#
-# This script is used to run your program on CodeCrafters
-#
-# This runs after .codecrafters/compile.sh
-#
-# Learn more: https://codecrafters.io/program-interface
+#!/usr/bin/env bash
+set -e
 
-set -e # Exit on failure
-
-exec /tmp/codecrafters-build-shell-go "$@"
+exec /tmp/codecrafters-build-shell-go

@@ -1,23 +1,25 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
 while true; do
   printf "$ "
-  read -r line || exit 0
+
+  # Read entire line into $REPLY
+  read -r || exit 0
 
   # Skip empty lines
-  [ -z "$line" ] && continue
+  [ -z "$REPLY" ] && continue
 
-  # Split input safely into an array
-  read -r -a tokens <<< "$line"
+  # Split words from REPLY
+  set -- $REPLY
 
-  cmd="${tokens[0]}"
-  args=("${tokens[@]:1}")
+  cmd="$1"
+  shift
 
   if [ "$cmd" = "exit" ]; then
     exit 0
 
   elif [ "$cmd" = "echo" ]; then
-    printf "%s\n" "${args[*]}"
+    printf "%s\n" "$*"
 
   else
     printf "%s: command not found\n" "$cmd"

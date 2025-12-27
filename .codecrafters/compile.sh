@@ -1,4 +1,5 @@
 #!/bin/sh
 set -e
 
-go build -o /tmp/codecrafters-build-shell-go ../
+cd "$(dirname "$0")/.."
+go build -o /tmp/codecrafters-build-shell-go .

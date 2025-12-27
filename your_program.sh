@@ -2,26 +2,22 @@
 
 while true; do
   printf "$ "
+  read -r line || exit 0
 
-  # Read entire line into $REPLY
-  read -r || exit 0
-
-  # Skip empty lines
-  [ -z "$REPLY" ] && continue
-
-  # Split words from REPLY
-  set -- $REPLY
-
-  cmd="$1"
-  shift
-
-  if [ "$cmd" = "exit" ]; then
+  # exit builtin
+  if [ "$line" = "exit" ]; then
     exit 0
-
-  elif [ "$cmd" = "echo" ]; then
-    printf "%s\n" "$*"
-
-  else
-    printf "%s: command not found\n" "$cmd"
   fi
+
+  # echo builtin (strip leading "echo ")
+  case "$line" in
+    echo\ *)
+      printf "%s\n" "${line#echo }"
+      ;;
+    *)
+      # ignore empty line
+      [ -z "$line" ] && continue
+      printf "%s: command not found\n" "$line"
+      ;;
+  esac
 done

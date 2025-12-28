@@ -13,7 +13,7 @@ import (
 	"unsafe"
 )
 
-/* ---------- RAW MODE ---------- */
+/* ---------- RAW MODE (LINUX) ---------- */
 
 type termios struct {
 	Iflag  uint32
@@ -28,6 +28,7 @@ type termios struct {
 const (
 	TCGETS = 0x5401
 	TCSETS = 0x5402
+
 	ICANON = 0x0002
 	ECHO   = 0x0008
 	VMIN   = 6
@@ -64,7 +65,7 @@ func main() {
 		fmt.Print("$ ")
 		var buf strings.Builder
 
-		// READ INPUT
+		/* ---- READ INPUT ---- */
 		for {
 			ch, err := reader.ReadByte()
 			if err != nil {
@@ -72,7 +73,7 @@ func main() {
 					fmt.Println()
 					return
 				}
-				break
+				continue
 			}
 
 			if ch == '\n' {
@@ -80,7 +81,7 @@ func main() {
 				break
 			}
 
-			// TAB AUTOCOMPLETE
+			/* ---- TAB AUTOCOMPLETE (QP2) ---- */
 			if ch == '\t' {
 				text := buf.String()
 				if strings.HasPrefix("echo", text) {
@@ -104,6 +105,8 @@ func main() {
 			continue
 		}
 
+		/* ---- BUILTINS ---- */
+
 		if line == "exit" {
 			return
 		}
@@ -113,15 +116,13 @@ func main() {
 			continue
 		}
 
-		tokens := strings.Fields(line)
-		cmd := tokens[0]
-		handled := false
+		/* ---- UN3: ls stderr redirection ---- */
 
-		/* ---------- UN3: ls handling ---------- */
-		if cmd == "ls" {
-			path := ""
-			redirectOut := ""
-			redirectErr := ""
+		tokens := strings.Fields(line)
+		if len(tokens) >= 3 && tokens[0] == "ls" {
+			var path string
+			var redirectOut string
+			var redirectErr string
 
 			for i := 1; i < len(tokens); i++ {
 				if tokens[i] == ">>" && i+1 < len(tokens) {
@@ -132,20 +133,26 @@ func main() {
 					redirectErr = tokens[i+1]
 					break
 				}
-				path = tokens[i]
+				if !strings.HasPrefix(tokens[i], "-") {
+					path = tokens[i]
+				}
 			}
 
 			if path != "" {
 				if _, err := os.Stat(path); err != nil {
 					msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
-					fmt.Print(msg)
 
-					// create empty stdout file
+					// print to terminal ONLY if stderr not redirected
+					if redirectErr == "" {
+						fmt.Print(msg)
+					}
+
+					// >> creates empty file
 					if redirectOut != "" {
 						os.OpenFile(redirectOut, os.O_CREATE, 0644)
 					}
 
-					// append stderr
+					// 2>> appends error
 					if redirectErr != "" {
 						f, _ := os.OpenFile(
 							redirectErr,
@@ -155,16 +162,12 @@ func main() {
 						f.WriteString(msg)
 						f.Close()
 					}
-
-					handled = true
+					continue
 				}
 			}
 		}
 
-		if handled {
-			continue
-		}
-
+		/* ---- FALLBACK ---- */
 		fmt.Printf("%s: command not found\n", line)
 	}
 }

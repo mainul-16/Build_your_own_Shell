@@ -18,6 +18,8 @@ var builtins = map[string]bool{
 	"cd":   true,
 }
 
+/* ---------------- PARSER ---------------- */
+
 func parseCommand(line string) []string {
 	var args []string
 	var current strings.Builder
@@ -92,13 +94,14 @@ func parseCommand(line string) []string {
 	return args
 }
 
+/* ---------------- BUILTINS ---------------- */
+
 func builtinCd(args []string) {
 	if len(args) == 0 {
 		return
 	}
 
 	path := args[0]
-
 	if path == "~" {
 		home := os.Getenv("HOME")
 		if home == "" {
@@ -112,6 +115,8 @@ func builtinCd(args []string) {
 		fmt.Printf("cd: %s: No such file or directory\n", args[0])
 	}
 }
+
+/* ---------------- MAIN ---------------- */
 
 func main() {
 	pathEnv := os.Getenv("PATH")
@@ -139,20 +144,47 @@ func main() {
 			continue
 		}
 
-		cmd := fields[0]
-		args := fields[1:]
+		// --- Handle output redirection ---
+		var outFile *os.File
+		cleanArgs := []string{}
+
+		for i := 0; i < len(fields); i++ {
+			if fields[i] == ">" || fields[i] == "1>" {
+				if i+1 < len(fields) {
+					f, err := os.Create(fields[i+1])
+					if err != nil {
+						fmt.Println("error creating file")
+						continue
+					}
+					outFile = f
+					i++ // skip filename
+				}
+			} else {
+				cleanArgs = append(cleanArgs, fields[i])
+			}
+		}
+
+		cmd := cleanArgs[0]
+		args := cleanArgs[1:]
 
 		if cmd == "exit" {
 			return
 		}
 
+		// Default stdout
+		stdout := os.Stdout
+		if outFile != nil {
+			stdout = outFile
+		}
+
 		switch cmd {
+
 		case "echo":
-			fmt.Println(strings.Join(args, " "))
+			fmt.Fprintln(stdout, strings.Join(args, " "))
 
 		case "pwd":
 			dir, _ := os.Getwd()
-			fmt.Println(dir)
+			fmt.Fprintln(stdout, dir)
 
 		case "cd":
 			builtinCd(args)
@@ -164,12 +196,12 @@ func main() {
 			name := args[0]
 
 			if builtins[name] {
-				fmt.Printf("%s is a shell builtin\n", name)
+				fmt.Fprintf(stdout, "%s is a shell builtin\n", name)
 				continue
 			}
 
 			if full, err := locateExecutable(name, pathEnv); err == nil {
-				fmt.Printf("%s is %s\n", name, full)
+				fmt.Fprintf(stdout, "%s is %s\n", name, full)
 			} else {
 				fmt.Printf("%s: not found\n", name)
 			}
@@ -185,13 +217,19 @@ func main() {
 				Path:   full,
 				Args:   append([]string{cmd}, args...),
 				Stdin:  os.Stdin,
-				Stdout: os.Stdout,
+				Stdout: stdout,
 				Stderr: os.Stderr,
 			}
 			_ = command.Run()
 		}
+
+		if outFile != nil {
+			outFile.Close()
+		}
 	}
 }
+
+/* ---------------- HELPERS ---------------- */
 
 func locateExecutable(cmd, pathEnv string) (string, error) {
 	for _, dir := range strings.Split(pathEnv, ":") {

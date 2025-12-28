@@ -102,7 +102,6 @@ func builtinCd(args []string) {
 	}
 
 	path := args[0]
-
 	if path == "~" {
 		home := os.Getenv("HOME")
 		if home == "" {
@@ -152,6 +151,7 @@ func main() {
 		// --- handle redirections ---
 		for i := 0; i < len(fields); i++ {
 			switch fields[i] {
+
 			case ">", "1>":
 				if i+1 < len(fields) {
 					f, err := os.Create(fields[i+1])
@@ -160,6 +160,20 @@ func main() {
 					}
 					i++
 				}
+
+			case ">>", "1>>":
+				if i+1 < len(fields) {
+					f, err := os.OpenFile(
+						fields[i+1],
+						os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+						0644,
+					)
+					if err == nil {
+						stdoutFile = f
+					}
+					i++
+				}
+
 			case "2>":
 				if i+1 < len(fields) {
 					f, err := os.Create(fields[i+1])
@@ -168,6 +182,7 @@ func main() {
 					}
 					i++
 				}
+
 			default:
 				clean = append(clean, fields[i])
 			}
@@ -180,7 +195,6 @@ func main() {
 			return
 		}
 
-		// Default outputs
 		stdout := os.Stdout
 		stderr := os.Stderr
 		if stdoutFile != nil {

@@ -17,85 +17,21 @@ var builtins = map[string]bool{
 	"cd":   true,
 }
 
-/* ---------------- AUTOCOMPLETE ---------------- */
+func autocomplete(line string) (string, bool) {
+	line = strings.TrimSuffix(line, "\n")
 
-func autocomplete(prefix string) (string, bool) {
-	if strings.HasPrefix("echo", prefix) {
-		return "echo ", true
-	}
-	if strings.HasPrefix("exit", prefix) {
-		return "exit ", true
+	if strings.HasSuffix(line, "\t") {
+		prefix := strings.TrimSuffix(line, "\t")
+
+		if strings.HasPrefix("echo", prefix) {
+			return "echo ", true
+		}
+		if strings.HasPrefix("exit", prefix) {
+			return "exit ", true
+		}
 	}
 	return "", false
 }
-
-/* ---------------- PARSER ---------------- */
-
-func parseCommand(line string) []string {
-	var args []string
-	var current strings.Builder
-	inSingle, inDouble := false, false
-
-	for i := 0; i < len(line); i++ {
-		ch := line[i]
-
-		if ch == '\\' {
-			if !inSingle && !inDouble && i+1 < len(line) {
-				current.WriteByte(line[i+1])
-				i++
-				continue
-			}
-			current.WriteByte('\\')
-			continue
-		}
-
-		switch ch {
-		case '\'':
-			if !inDouble {
-				inSingle = !inSingle
-			} else {
-				current.WriteByte(ch)
-			}
-		case '"':
-			if !inSingle {
-				inDouble = !inDouble
-			} else {
-				current.WriteByte(ch)
-			}
-		case ' ', '\t':
-			if inSingle || inDouble {
-				current.WriteByte(ch)
-			} else if current.Len() > 0 {
-				args = append(args, current.String())
-				current.Reset()
-			}
-		default:
-			current.WriteByte(ch)
-		}
-	}
-
-	if current.Len() > 0 {
-		args = append(args, current.String())
-	}
-	return args
-}
-
-/* ---------------- BUILTINS ---------------- */
-
-func builtinCd(args []string) {
-	if len(args) == 0 {
-		return
-	}
-	path := args[0]
-	if path == "~" {
-		path = os.Getenv("HOME")
-	}
-	if err := os.Chdir(path); err != nil {
-		fmt.Printf("cd: %s: No such file or directory\n", args[0])
-	}
-}
-
-/* ---------------- MAIN ---------------- */
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
@@ -104,51 +40,31 @@ func main() {
 	for {
 		fmt.Print("$ ")
 
-		buffer := ""
-
-		for {
-			ch, _, err := reader.ReadRune()
-			if err != nil {
-				return
-			}
-
-			// ENTER
-			if ch == '\n' {
-				fmt.Print("\n")
-				break
-			}
-
-			// TAB → autocomplete
-			if ch == '\t' {
-				if completed, ok := autocomplete(buffer); ok {
-					// 🔥 clear line + redraw
-					fmt.Print("\r\033[K$ ")
-					fmt.Print(completed)
-					buffer = strings.TrimSpace(completed)
-				}
-				continue
-			}
-
-			// Normal character
-			buffer += string(ch)
-			fmt.Print(string(ch))
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
 		}
 
-		line := strings.TrimSpace(buffer)
+		// 🔥 TAB AUTOCOMPLETE (Codecrafters-style)
+		if completed, ok := autocomplete(line); ok {
+			fmt.Printf("$ %s\n", completed)
+			continue
+		}
+
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 
-		fields := parseCommand(line)
-		cmd := fields[0]
-		args := fields[1:]
+		parts := strings.Fields(line)
+		cmd := parts[0]
+		args := parts[1:]
 
 		if cmd == "exit" {
 			return
 		}
 
 		switch cmd {
-
 		case "echo":
 			fmt.Println(strings.Join(args, " "))
 
@@ -157,12 +73,13 @@ func main() {
 			fmt.Println(dir)
 
 		case "cd":
-			builtinCd(args)
+			if len(args) > 0 {
+				if err := os.Chdir(args[0]); err != nil {
+					fmt.Printf("cd: %s: No such file or directory\n", args[0])
+				}
+			}
 
 		case "type":
-			if len(args) == 0 {
-				continue
-			}
 			if builtins[args[0]] {
 				fmt.Printf("%s is a shell builtin\n", args[0])
 				continue
@@ -190,8 +107,6 @@ func main() {
 		}
 	}
 }
-
-/* ---------------- HELPERS ---------------- */
 
 func locateExecutable(cmd, pathEnv string) (string, error) {
 	for _, dir := range strings.Split(pathEnv, ":") {

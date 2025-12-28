@@ -25,7 +25,6 @@ func builtinCd(args []string) {
 
 	path := args[0]
 
-	// Handle ~ (home directory)
 	if path == "~" {
 		home := os.Getenv("HOME")
 		if home == "" {
@@ -106,10 +105,14 @@ func main() {
 				continue
 			}
 
-			command := exec.Command(full, args...)
-			command.Stdin = os.Stdin
-			command.Stdout = os.Stdout
-			command.Stderr = os.Stderr
+			command := &exec.Cmd{
+				Path:   full,
+				Args:   append([]string{cmd}, args...), // 🔥 FIX HERE
+				Stdin:  os.Stdin,
+				Stdout: os.Stdout,
+				Stderr: os.Stderr,
+			}
+
 			_ = command.Run()
 		}
 	}

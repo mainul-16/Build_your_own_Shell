@@ -4,27 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strings"
 )
-
-func tryAutocomplete(line string) (string, bool) {
-	line = strings.TrimRight(line, "\n")
-
-	trimmed := strings.TrimRight(line, " ")
-	spaces := len(line) - len(trimmed)
-
-	if spaces == 0 {
-		return "", false
-	}
-
-	if strings.HasPrefix("echo", trimmed) {
-		return "echo ", true
-	}
-	if strings.HasPrefix("exit", trimmed) {
-		return "exit ", true
-	}
-	return "", false
-}
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
@@ -32,28 +12,53 @@ func main() {
 	for {
 		fmt.Print("$ ")
 
-		line, err := reader.ReadString('\n')
-		if err != nil {
+		buffer := ""
+		spaceCount := 0
+
+		for {
+			ch, err := reader.ReadByte()
+			if err != nil {
+				return
+			}
+
+			// ENTER → stop input
+			if ch == '\n' {
+				fmt.Print("\n")
+				break
+			}
+
+			// SPACE (TAB is rendered as spaces)
+			if ch == ' ' {
+				spaceCount++
+
+				// FIRST space after builtin prefix = autocomplete trigger
+				if spaceCount == 1 {
+					if buffer == "ech" {
+						fmt.Print("\r$ echo ")
+						buffer = "echo"
+						continue
+					}
+					if buffer == "exi" {
+						fmt.Print("\r$ exit ")
+						buffer = "exit"
+						continue
+					}
+				}
+
+				// otherwise just echo space
+				fmt.Print(" ")
+				continue
+			}
+
+			// reset space counter on normal character
+			spaceCount = 0
+			buffer += string(ch)
+			fmt.Print(string(ch))
+		}
+
+		// handle exit
+		if buffer == "exit" {
 			return
-		}
-
-		// ✅ AUTOCOMPLETE HANDLING
-		if completed, ok := tryAutocomplete(line); ok {
-			fmt.Printf("$ %s\n", completed)
-			continue
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		if line == "exit" {
-			return
-		}
-
-		if strings.HasPrefix(line, "echo ") {
-			fmt.Println(strings.TrimPrefix(line, "echo "))
 		}
 	}
 }

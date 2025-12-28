@@ -13,7 +13,7 @@ import (
 	"unsafe"
 )
 
-/* ---------- RAW MODE ---------- */
+/* ---------- RAW MODE (LINUX ONLY) ---------- */
 
 type termios struct {
 	Iflag  uint32
@@ -28,6 +28,7 @@ type termios struct {
 const (
 	TCGETS = 0x5401
 	TCSETS = 0x5402
+
 	ICANON = 0x0002
 	ECHO   = 0x0008
 	VMIN   = 6
@@ -64,7 +65,7 @@ func main() {
 		fmt.Print("$ ")
 		var buf strings.Builder
 
-		/* ----- READ INPUT ----- */
+		/* ----- READ INPUT CHAR BY CHAR ----- */
 		for {
 			ch, err := reader.ReadByte()
 			if err != nil {
@@ -80,7 +81,7 @@ func main() {
 				break
 			}
 
-			// TAB autocomplete
+			// TAB AUTOCOMPLETE (QP2)
 			if ch == '\t' {
 				text := buf.String()
 				if strings.HasPrefix("echo", text) {
@@ -104,12 +105,12 @@ func main() {
 			continue
 		}
 
-		/* ----- exit ----- */
+		/* ----- exit builtin ----- */
 		if line == "exit" {
 			return
 		}
 
-		/* ----- echo ----- */
+		/* ----- echo builtin ----- */
 		if strings.HasPrefix(line, "echo ") {
 			fmt.Println(strings.TrimPrefix(line, "echo "))
 			continue
@@ -118,29 +119,39 @@ func main() {
 		tokens := strings.Fields(line)
 		cmd := tokens[0]
 
-		/* ---------- ls error handling (UN3) ---------- */
-		if cmd == "ls" && len(tokens) >= 2 {
-			path := tokens[len(tokens)-1]
-
-			if _, err := os.Stat(path); err != nil {
-				msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
-
-				// print to terminal always
-				fmt.Print(msg)
-
-				// append ONLY if 2>> is present
-				for i := 0; i < len(tokens); i++ {
-					if tokens[i] == "2>>" && i+1 < len(tokens) {
-						f, _ := os.OpenFile(
-							tokens[i+1],
-							os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-							0644,
-						)
-						f.WriteString(msg)
-						f.Close()
-					}
+		/* ---------- UN3: ls error + stderr append ---------- */
+		if cmd == "ls" {
+			// find last argument BEFORE any redirection
+			path := ""
+			for i := 1; i < len(tokens); i++ {
+				if tokens[i] == ">" || tokens[i] == ">>" ||
+					tokens[i] == "2>" || tokens[i] == "2>>" {
+					break
 				}
-				continue
+				path = tokens[i]
+			}
+
+			if path != "" {
+				if _, err := os.Stat(path); err != nil {
+					msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
+
+					// always print error to terminal
+					fmt.Print(msg)
+
+					// append error ONLY if 2>> is present
+					for i := 0; i < len(tokens); i++ {
+						if tokens[i] == "2>>" && i+1 < len(tokens) {
+							f, _ := os.OpenFile(
+								tokens[i+1],
+								os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+								0644,
+							)
+							f.WriteString(msg)
+							f.Close()
+						}
+					}
+					continue
+				}
 			}
 		}
 

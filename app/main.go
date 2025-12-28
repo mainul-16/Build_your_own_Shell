@@ -183,6 +183,19 @@ func main() {
 					i++
 				}
 
+			case "2>>":
+				if i+1 < len(fields) {
+					f, err := os.OpenFile(
+						fields[i+1],
+						os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+						0644,
+					)
+					if err == nil {
+						stderrFile = f
+					}
+					i++
+				}
+
 			default:
 				clean = append(clean, fields[i])
 			}

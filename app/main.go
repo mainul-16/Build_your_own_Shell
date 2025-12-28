@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-// builtin command set
 var builtins = map[string]bool{
 	"exit": true,
 	"echo": true,
 	"type": true,
 	"pwd":  true,
+	"cd":   true,
 }
 
 func main() {
@@ -39,6 +39,19 @@ func main() {
 		// exit
 		if cmd == "exit" {
 			return
+		}
+
+		// cd (absolute paths)
+		if cmd == "cd" {
+			if len(args) == 0 {
+				continue
+			}
+
+			path := args[0]
+			if err := os.Chdir(path); err != nil {
+				fmt.Printf("cd: %s: No such file or directory\n", path)
+			}
+			continue
 		}
 
 		// pwd
@@ -80,7 +93,7 @@ func main() {
 			continue
 		}
 
-		// external command
+		// external commands
 		path, err := exec.LookPath(cmd)
 		if err != nil {
 			fmt.Printf("%s: command not found\n", cmd)

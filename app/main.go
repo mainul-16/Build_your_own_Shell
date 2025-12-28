@@ -18,30 +18,6 @@ var builtins = map[string]bool{
 	"cd":   true,
 }
 
-/* ---------------- AUTOCOMPLETE ---------------- */
-
-func handleAutocomplete(line string) bool {
-	// remove newline only
-	line = strings.TrimRight(line, "\n")
-
-	trimmed := strings.TrimRight(line, " ")
-
-	// no trailing spaces → not TAB
-	if trimmed == line {
-		return false
-	}
-
-	if strings.HasPrefix("echo", trimmed) {
-		fmt.Println("$ echo ")
-		return true
-	}
-	if strings.HasPrefix("exit", trimmed) {
-		fmt.Println("$ exit ")
-		return true
-	}
-	return false
-}
-
 /* ---------------- PARSER ---------------- */
 
 func parseCommand(line string) []string {
@@ -54,6 +30,7 @@ func parseCommand(line string) []string {
 	for i := 0; i < len(line); i++ {
 		ch := line[i]
 
+		// Backslash handling
 		if ch == '\\' {
 			if !inSingle && !inDouble {
 				if i+1 < len(line) {
@@ -157,11 +134,6 @@ func main() {
 			continue
 		}
 
-		// 🔥 AUTOCOMPLETE — MUST BE BEFORE TrimSpace
-		if handleAutocomplete(line) {
-			continue
-		}
-
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -176,6 +148,7 @@ func main() {
 		var stderrFile *os.File
 		clean := []string{}
 
+		// --- handle redirections ---
 		for i := 0; i < len(fields); i++ {
 			switch fields[i] {
 

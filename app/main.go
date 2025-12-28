@@ -3,111 +3,148 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 var builtins = map[string]bool{
-	"exit": true,
 	"echo": true,
+	"exit": true,
 	"type": true,
 	"pwd":  true,
 	"cd":   true,
 }
 
+func builtinCd(args string) {
+
+	path := args
+	if len(path) == 0 {
+		return
+	}
+
+	if err := os.Chdir(path); err != nil {
+		fmt.Fprintf(os.Stderr, "cd: %s: No such file or directory\n", path)
+		return
+	}
+}
+
 func main() {
-	reader := bufio.NewReader(os.Stdin)
+	// Capture PATH once at startup (consistent behavior).
+	pathEnv := os.Getenv("PATH")
+
+	in := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Print("$ ")
+		// Prompt
+		fmt.Fprint(os.Stdout, "$ ")
 
-		line, err := reader.ReadString('\n')
+		// Read a line
+		line, err := in.ReadString('\n')
 		if err != nil {
-			return
+			// Handle EOF (Ctrl-D) gracefully
+			if err == io.EOF {
+				fmt.Println()
+				return
+			}
+			fmt.Fprintln(os.Stderr, "read error:", err)
+			continue
 		}
 
+		// Trim and split fields (handles multiple spaces/tabs)
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 
-		parts := strings.Fields(line)
-		cmd := parts[0]
-		args := parts[1:]
+		fields := strings.Fields(line)
+		cmd := fields[0]
 
-		// exit
+		// Global exit
 		if cmd == "exit" {
 			return
 		}
 
-		// cd (absolute paths)
-		if cmd == "cd" {
-			if len(args) == 0 {
+		switch cmd {
+		case "echo":
+			// echo prints remaining args joined by spaces
+			fmt.Println(strings.Join(fields[1:], " "))
+
+		case "pwd":
+			dir, _ := os.Getwd()
+
+			fmt.Println(dir)
+
+		case "cd":
+			builtinCd(fields[1])
+
+		case "type":
+			// check operands
+			if len(fields) < 2 {
+				fmt.Println("type: missing operand")
+				continue
+			}
+			name := fields[1]
+
+			// builtin?
+			if builtins[name] {
+				fmt.Printf("%s is a shell builtin\n", name)
 				continue
 			}
 
-			path := args[0]
-			if err := os.Chdir(path); err != nil {
-				fmt.Printf("cd: %s: No such file or directory\n", path)
-			}
-			continue
-		}
-
-		// pwd
-		if cmd == "pwd" {
-			cwd, err := os.Getwd()
-			if err != nil {
-				fmt.Println("pwd: error retrieving current directory")
+			// locate executable in PATH
+			if full, err := locateExecutable(name, pathEnv); err == nil && full != "" {
+				fmt.Printf("%s is %s\n", name, full)
 			} else {
-				fmt.Println(cwd)
-			}
-			continue
-		}
-
-		// echo
-		if cmd == "echo" {
-			fmt.Println(strings.Join(args, " "))
-			continue
-		}
-
-		// type
-		if cmd == "type" {
-			if len(args) == 0 {
-				continue
+				fmt.Printf("%s: not found\n", name)
 			}
 
-			target := args[0]
+		default:
+			// Unknown command (same UX as your original)
+			// fmt.Println(fields)
+			// fmt.Println(cmd)
+			full, err := locateExecutable(cmd, pathEnv)
+			// fmt.Println(full)
+			if err == nil && full != "" {
 
-			if builtins[target] {
-				fmt.Printf("%s is a shell builtin\n", target)
-				continue
-			}
+				p_exec := exec.Command(cmd, fields[1:]...)
+				output, _ := p_exec.CombinedOutput()
 
-			path, err := exec.LookPath(target)
-			if err != nil {
-				fmt.Printf("%s not found\n", target)
+				// Print the output
+				fmt.Print(string(output))
+
 			} else {
-				fmt.Printf("%s is %s\n", target, path)
+				fmt.Printf("%s: command not found\n", line)
 			}
-			continue
 		}
-
-		// external commands
-		path, err := exec.LookPath(cmd)
-		if err != nil {
-			fmt.Printf("%s: command not found\n", cmd)
-			continue
-		}
-
-		command := &exec.Cmd{
-			Path:   path,
-			Args:   append([]string{cmd}, args...),
-			Stdin:  os.Stdin,
-			Stdout: os.Stdout,
-			Stderr: os.Stderr,
-		}
-
-		_ = command.Run()
 	}
+}
+
+// locateExecutable looks for cmd in the PATH directories and returns
+// the first executable full path it finds, or "", error if none.
+func locateExecutable(cmd string, pathEnv string) (string, error) {
+	paths := strings.Split(pathEnv, ":")
+	for _, p := range paths {
+		full := filepath.Join(p, cmd)
+		if isExecutable(full) {
+			return full, nil
+		}
+	}
+	return "", fmt.Errorf("not found")
+}
+
+// isExecutable returns true if the path exists and has any exec bit set.
+// Directories are considered non-executable for the purpose of locating a binary.
+func isExecutable(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if info.IsDir() {
+		return false
+	}
+	mode := info.Mode()
+	return mode&0111 != 0
 }

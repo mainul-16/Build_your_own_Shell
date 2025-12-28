@@ -13,7 +13,7 @@ import (
 	"unsafe"
 )
 
-/* ---------- RAW MODE (LINUX ONLY) ---------- */
+/* ---------- RAW MODE ---------- */
 
 type termios struct {
 	Iflag  uint32
@@ -28,7 +28,6 @@ type termios struct {
 const (
 	TCGETS = 0x5401
 	TCSETS = 0x5402
-
 	ICANON = 0x0002
 	ECHO   = 0x0008
 	VMIN   = 6
@@ -37,8 +36,8 @@ const (
 
 func rawMode() func() {
 	fd := os.Stdin.Fd()
-
 	var old termios
+
 	syscall.Syscall(syscall.SYS_IOCTL, fd, TCGETS, uintptr(unsafe.Pointer(&old)))
 
 	newState := old
@@ -81,7 +80,7 @@ func main() {
 				break
 			}
 
-			// TAB AUTOCOMPLETE (QP2)
+			// TAB autocomplete
 			if ch == '\t' {
 				text := buf.String()
 				if strings.HasPrefix("echo", text) {
@@ -105,49 +104,47 @@ func main() {
 			continue
 		}
 
+		/* ----- exit ----- */
 		if line == "exit" {
 			return
 		}
 
+		/* ----- echo ----- */
 		if strings.HasPrefix(line, "echo ") {
 			fmt.Println(strings.TrimPrefix(line, "echo "))
 			continue
 		}
 
-		/* ---------- UN3: APPEND STDERR ---------- */
-
 		tokens := strings.Fields(line)
-		for i := 0; i < len(tokens); i++ {
-			if tokens[i] == "2>>" && i+1 < len(tokens) {
-				cmd := tokens[0]
-				outFile := tokens[i+1]
+		cmd := tokens[0]
 
-				if cmd == "ls" {
-					path := tokens[i-1]
+		/* ---------- ls error handling (UN3) ---------- */
+		if cmd == "ls" && len(tokens) >= 2 {
+			path := tokens[len(tokens)-1]
 
-					if _, err := os.Stat(path); err != nil {
-						msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
+			if _, err := os.Stat(path); err != nil {
+				msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
 
-						// print error to terminal
-						fmt.Print(msg)
+				// print to terminal always
+				fmt.Print(msg)
 
-						// append error to file
+				// append ONLY if 2>> is present
+				for i := 0; i < len(tokens); i++ {
+					if tokens[i] == "2>>" && i+1 < len(tokens) {
 						f, _ := os.OpenFile(
-							outFile,
+							tokens[i+1],
 							os.O_CREATE|os.O_WRONLY|os.O_APPEND,
 							0644,
 						)
 						f.WriteString(msg)
 						f.Close()
-						goto PROMPT
 					}
 				}
+				continue
 			}
 		}
 
+		/* ----- fallback ----- */
 		fmt.Printf("%s: command not found\n", line)
-
-	PROMPT:
-		continue
 	}
 }

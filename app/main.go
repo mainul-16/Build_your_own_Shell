@@ -13,7 +13,7 @@ import (
 	"unsafe"
 )
 
-/* ---------- RAW MODE (LINUX ONLY) ---------- */
+/* ---------- RAW MODE ---------- */
 
 type termios struct {
 	Iflag  uint32
@@ -64,7 +64,7 @@ func main() {
 		fmt.Print("$ ")
 		var buf strings.Builder
 
-		/* ----- READ INPUT ----- */
+		// READ INPUT
 		for {
 			ch, err := reader.ReadByte()
 			if err != nil {
@@ -80,7 +80,7 @@ func main() {
 				break
 			}
 
-			// TAB autocomplete
+			// TAB AUTOCOMPLETE
 			if ch == '\t' {
 				text := buf.String()
 				if strings.HasPrefix("echo", text) {
@@ -104,12 +104,10 @@ func main() {
 			continue
 		}
 
-		/* ----- exit ----- */
 		if line == "exit" {
 			return
 		}
 
-		/* ----- echo ----- */
 		if strings.HasPrefix(line, "echo ") {
 			fmt.Println(strings.TrimPrefix(line, "echo "))
 			continue
@@ -118,14 +116,19 @@ func main() {
 		tokens := strings.Fields(line)
 		cmd := tokens[0]
 
-		/* ---------- UN3: ls error handling ---------- */
+		/* ---------- UN3: ls handling ---------- */
 		if cmd == "ls" {
 			path := ""
+			redirectOut := ""
+			redirectErr := ""
 
-			// find last argument before redirection
 			for i := 1; i < len(tokens); i++ {
-				if tokens[i] == ">" || tokens[i] == ">>" ||
-					tokens[i] == "2>" || tokens[i] == "2>>" {
+				if tokens[i] == ">>" && i+1 < len(tokens) {
+					redirectOut = tokens[i+1]
+					break
+				}
+				if tokens[i] == "2>>" && i+1 < len(tokens) {
+					redirectErr = tokens[i+1]
 					break
 				}
 				path = tokens[i]
@@ -135,32 +138,29 @@ func main() {
 				if _, err := os.Stat(path); err != nil {
 					msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
 
-					// always print error
+					// print error to terminal
 					fmt.Print(msg)
 
-					// handle redirections
-					for i := 0; i < len(tokens); i++ {
-						if tokens[i] == ">>" && i+1 < len(tokens) {
-							// create stdout file (even if empty)
-							os.OpenFile(tokens[i+1], os.O_CREATE, 0644)
-						}
+					// >> : create empty stdout file
+					if redirectOut != "" {
+						os.OpenFile(redirectOut, os.O_CREATE, 0644)
+					}
 
-						if tokens[i] == "2>>" && i+1 < len(tokens) {
-							f, _ := os.OpenFile(
-								tokens[i+1],
-								os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-								0644,
-							)
-							f.WriteString(msg)
-							f.Close()
-						}
+					// 2>> : append error
+					if redirectErr != "" {
+						f, _ := os.OpenFile(
+							redirectErr,
+							os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+							0644,
+						)
+						f.WriteString(msg)
+						f.Close()
 					}
 					continue
 				}
 			}
 		}
 
-		/* ----- fallback ----- */
 		fmt.Printf("%s: command not found\n", line)
 	}
 }

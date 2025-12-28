@@ -25,8 +25,18 @@ func builtinCd(args []string) {
 
 	path := args[0]
 
+	// Handle ~ (home directory)
+	if path == "~" {
+		home := os.Getenv("HOME")
+		if home == "" {
+			fmt.Printf("cd: ~: No such file or directory\n")
+			return
+		}
+		path = home
+	}
+
 	if err := os.Chdir(path); err != nil {
-		fmt.Printf("cd: %s: No such file or directory\n", path)
+		fmt.Printf("cd: %s: No such file or directory\n", args[0])
 	}
 }
 
@@ -55,7 +65,6 @@ func main() {
 		cmd := fields[0]
 		args := fields[1:]
 
-		// exit
 		if cmd == "exit" {
 			return
 		}
@@ -106,7 +115,6 @@ func main() {
 	}
 }
 
-// locateExecutable finds an executable in PATH
 func locateExecutable(cmd, pathEnv string) (string, error) {
 	for _, dir := range strings.Split(pathEnv, ":") {
 		full := filepath.Join(dir, cmd)
@@ -117,7 +125,6 @@ func locateExecutable(cmd, pathEnv string) (string, error) {
 	return "", fmt.Errorf("not found")
 }
 
-// isExecutable checks if file exists and has execute permission
 func isExecutable(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() {

@@ -21,17 +21,30 @@ var builtins = map[string]bool{
 func parseCommand(line string) []string {
 	var args []string
 	var current strings.Builder
-	inSingleQuote := false
+
+	inSingle := false
+	inDouble := false
 
 	for i := 0; i < len(line); i++ {
 		ch := line[i]
 
 		switch ch {
 		case '\'':
-			inSingleQuote = !inSingleQuote
+			if !inDouble {
+				inSingle = !inSingle
+			} else {
+				current.WriteByte(ch)
+			}
+
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			} else {
+				current.WriteByte(ch)
+			}
 
 		case ' ', '\t':
-			if inSingleQuote {
+			if inSingle || inDouble {
 				current.WriteByte(ch)
 			} else if current.Len() > 0 {
 				args = append(args, current.String())
@@ -105,7 +118,6 @@ func main() {
 		}
 
 		switch cmd {
-
 		case "echo":
 			fmt.Println(strings.Join(args, " "))
 
@@ -120,7 +132,6 @@ func main() {
 			if len(args) == 0 {
 				continue
 			}
-
 			name := args[0]
 
 			if builtins[name] {
@@ -148,7 +159,6 @@ func main() {
 				Stdout: os.Stdout,
 				Stderr: os.Stderr,
 			}
-
 			_ = command.Run()
 		}
 	}

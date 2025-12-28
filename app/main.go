@@ -28,7 +28,6 @@ type termios struct {
 const (
 	TCGETS = 0x5401
 	TCSETS = 0x5402
-
 	ICANON = 0x0002
 	ECHO   = 0x0008
 	VMIN   = 6
@@ -65,7 +64,7 @@ func main() {
 		fmt.Print("$ ")
 		var buf strings.Builder
 
-		/* ----- READ INPUT CHAR BY CHAR ----- */
+		/* ----- READ INPUT ----- */
 		for {
 			ch, err := reader.ReadByte()
 			if err != nil {
@@ -81,7 +80,7 @@ func main() {
 				break
 			}
 
-			// TAB AUTOCOMPLETE (QP2)
+			// TAB autocomplete
 			if ch == '\t' {
 				text := buf.String()
 				if strings.HasPrefix("echo", text) {
@@ -105,12 +104,12 @@ func main() {
 			continue
 		}
 
-		/* ----- exit builtin ----- */
+		/* ----- exit ----- */
 		if line == "exit" {
 			return
 		}
 
-		/* ----- echo builtin ----- */
+		/* ----- echo ----- */
 		if strings.HasPrefix(line, "echo ") {
 			fmt.Println(strings.TrimPrefix(line, "echo "))
 			continue
@@ -119,10 +118,11 @@ func main() {
 		tokens := strings.Fields(line)
 		cmd := tokens[0]
 
-		/* ---------- UN3: ls error + stderr append ---------- */
+		/* ---------- UN3: ls error handling ---------- */
 		if cmd == "ls" {
-			// find last argument BEFORE any redirection
 			path := ""
+
+			// find last argument before redirection
 			for i := 1; i < len(tokens); i++ {
 				if tokens[i] == ">" || tokens[i] == ">>" ||
 					tokens[i] == "2>" || tokens[i] == "2>>" {
@@ -135,11 +135,16 @@ func main() {
 				if _, err := os.Stat(path); err != nil {
 					msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
 
-					// always print error to terminal
+					// always print error
 					fmt.Print(msg)
 
-					// append error ONLY if 2>> is present
+					// handle redirections
 					for i := 0; i < len(tokens); i++ {
+						if tokens[i] == ">>" && i+1 < len(tokens) {
+							// create stdout file (even if empty)
+							os.OpenFile(tokens[i+1], os.O_CREATE, 0644)
+						}
+
 						if tokens[i] == "2>>" && i+1 < len(tokens) {
 							f, _ := os.OpenFile(
 								tokens[i+1],

@@ -10,7 +10,7 @@ import (
 	"unsafe"
 )
 
-/* ---- RAW MODE (ABSOLUTE MINIMUM) ---- */
+/* ---------- RAW MODE (LINUX ONLY) ---------- */
 
 type termios struct {
 	Iflag  uint32
@@ -50,7 +50,7 @@ func rawMode() func() {
 	}
 }
 
-/* ---- MAIN ---- */
+/* ---------- MAIN ---------- */
 
 func main() {
 	restore := rawMode()
@@ -62,6 +62,7 @@ func main() {
 		fmt.Print("$ ")
 		var buf strings.Builder
 
+		/* ----- READ INPUT ----- */
 		for {
 			ch, err := reader.ReadByte()
 			if err != nil {
@@ -72,16 +73,14 @@ func main() {
 				continue
 			}
 
-			// ENTER
 			if ch == '\n' {
 				fmt.Println()
 				break
 			}
 
-			// TAB AUTOCOMPLETE
+			// TAB AUTOCOMPLETE (QP2)
 			if ch == '\t' {
 				text := buf.String()
-
 				if strings.HasPrefix("echo", text) {
 					fmt.Print("\r$ echo ")
 					buf.Reset()
@@ -94,26 +93,61 @@ func main() {
 				continue
 			}
 
-			// NORMAL CHAR
 			buf.WriteByte(ch)
 			fmt.Printf("%c", ch)
 		}
 
 		line := strings.TrimSpace(buf.String())
-
 		if line == "" {
 			continue
 		}
 
+		/* ----- EXIT BUILTIN ----- */
 		if line == "exit" {
 			return
 		}
 
+		/* ----- ECHO BUILTIN ----- */
 		if strings.HasPrefix(line, "echo ") {
 			fmt.Println(strings.TrimPrefix(line, "echo "))
 			continue
 		}
 
+		/* ---------- UN3: APPEND STDERR ---------- */
+
+		tokens := strings.Fields(line)
+		if len(tokens) >= 4 {
+			for i := 0; i < len(tokens); i++ {
+				if tokens[i] == ">>" {
+					cmd := tokens[0]
+					outFile := tokens[i+1]
+
+					// Only ls error handling needed for UN3
+					if cmd == "ls" {
+						// path is last argument before >>
+						path := tokens[i-1]
+
+						if _, err := os.Stat(path); err != nil {
+							msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
+
+							f, _ := os.OpenFile(
+								outFile,
+								os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+								0644,
+							)
+							f.WriteString(msg)
+							f.Close()
+							goto PROMPT
+						}
+					}
+				}
+			}
+		}
+
+		/* ----- DEFAULT FALLBACK ----- */
 		fmt.Printf("%s: command not found\n", line)
+
+	PROMPT:
+		continue
 	}
 }

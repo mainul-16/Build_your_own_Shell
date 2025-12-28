@@ -105,12 +105,10 @@ func main() {
 			continue
 		}
 
-		/* ----- EXIT ----- */
 		if line == "exit" {
 			return
 		}
 
-		/* ----- ECHO ----- */
 		if strings.HasPrefix(line, "echo ") {
 			fmt.Println(strings.TrimPrefix(line, "echo "))
 			continue
@@ -120,7 +118,7 @@ func main() {
 
 		tokens := strings.Fields(line)
 		for i := 0; i < len(tokens); i++ {
-			if tokens[i] == ">>" && i+1 < len(tokens) {
+			if tokens[i] == "2>>" && i+1 < len(tokens) {
 				cmd := tokens[0]
 				outFile := tokens[i+1]
 
@@ -130,10 +128,10 @@ func main() {
 					if _, err := os.Stat(path); err != nil {
 						msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
 
-						// ✅ PRINT TO TERMINAL
+						// print error to terminal
 						fmt.Print(msg)
 
-						// ✅ APPEND TO FILE
+						// append error to file
 						f, _ := os.OpenFile(
 							outFile,
 							os.O_CREATE|os.O_WRONLY|os.O_APPEND,
@@ -147,7 +145,6 @@ func main() {
 			}
 		}
 
-		/* ----- FALLBACK ----- */
 		fmt.Printf("%s: command not found\n", line)
 
 	PROMPT:

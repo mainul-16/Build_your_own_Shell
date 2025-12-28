@@ -102,6 +102,7 @@ func builtinCd(args []string) {
 	}
 
 	path := args[0]
+
 	if path == "~" {
 		home := os.Getenv("HOME")
 		if home == "" {
@@ -144,37 +145,49 @@ func main() {
 			continue
 		}
 
-		// --- Handle output redirection ---
-		var outFile *os.File
-		cleanArgs := []string{}
+		var stdoutFile *os.File
+		var stderrFile *os.File
+		clean := []string{}
 
+		// --- handle redirections ---
 		for i := 0; i < len(fields); i++ {
-			if fields[i] == ">" || fields[i] == "1>" {
+			switch fields[i] {
+			case ">", "1>":
 				if i+1 < len(fields) {
 					f, err := os.Create(fields[i+1])
-					if err != nil {
-						fmt.Println("error creating file")
-						continue
+					if err == nil {
+						stdoutFile = f
 					}
-					outFile = f
-					i++ // skip filename
+					i++
 				}
-			} else {
-				cleanArgs = append(cleanArgs, fields[i])
+			case "2>":
+				if i+1 < len(fields) {
+					f, err := os.Create(fields[i+1])
+					if err == nil {
+						stderrFile = f
+					}
+					i++
+				}
+			default:
+				clean = append(clean, fields[i])
 			}
 		}
 
-		cmd := cleanArgs[0]
-		args := cleanArgs[1:]
+		cmd := clean[0]
+		args := clean[1:]
 
 		if cmd == "exit" {
 			return
 		}
 
-		// Default stdout
+		// Default outputs
 		stdout := os.Stdout
-		if outFile != nil {
-			stdout = outFile
+		stderr := os.Stderr
+		if stdoutFile != nil {
+			stdout = stdoutFile
+		}
+		if stderrFile != nil {
+			stderr = stderrFile
 		}
 
 		switch cmd {
@@ -203,13 +216,13 @@ func main() {
 			if full, err := locateExecutable(name, pathEnv); err == nil {
 				fmt.Fprintf(stdout, "%s is %s\n", name, full)
 			} else {
-				fmt.Printf("%s: not found\n", name)
+				fmt.Fprintf(stderr, "%s: not found\n", name)
 			}
 
 		default:
 			full, err := locateExecutable(cmd, pathEnv)
 			if err != nil {
-				fmt.Printf("%s: command not found\n", cmd)
+				fmt.Fprintf(stderr, "%s: command not found\n", cmd)
 				continue
 			}
 
@@ -218,13 +231,16 @@ func main() {
 				Args:   append([]string{cmd}, args...),
 				Stdin:  os.Stdin,
 				Stdout: stdout,
-				Stderr: os.Stderr,
+				Stderr: stderr,
 			}
 			_ = command.Run()
 		}
 
-		if outFile != nil {
-			outFile.Close()
+		if stdoutFile != nil {
+			stdoutFile.Close()
+		}
+		if stderrFile != nil {
+			stderrFile.Close()
 		}
 	}
 }

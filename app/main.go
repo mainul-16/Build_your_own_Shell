@@ -151,9 +151,10 @@ func main() {
 			continue
 		}
 
-		// 🔥 AUTOCOMPLETE HANDLING
+		// 🔥 AUTOCOMPLETE (replace current line, no newline)
 		if completed, ok := handleAutocomplete(line); ok {
-			fmt.Println(completed)
+			fmt.Print("\r$ ")
+			fmt.Print(completed)
 			continue
 		}
 

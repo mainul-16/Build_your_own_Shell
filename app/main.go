@@ -1,13 +1,14 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/chzyer/readline"
 )
 
 var builtins = map[string]bool{
@@ -30,7 +31,6 @@ func parseCommand(line string) []string {
 	for i := 0; i < len(line); i++ {
 		ch := line[i]
 
-		// Backslash handling
 		if ch == '\\' {
 			if !inSingle && !inDouble {
 				if i+1 < len(line) {
@@ -119,19 +119,28 @@ func builtinCd(args []string) {
 /* ---------------- MAIN ---------------- */
 
 func main() {
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt: "$ ",
+		AutoComplete: readline.NewPrefixCompleter(
+			readline.PcItem("echo"),
+			readline.PcItem("exit"),
+		),
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer rl.Close()
+
 	pathEnv := os.Getenv("PATH")
-	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Print("$ ")
-
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				fmt.Println()
-				return
-			}
+		line, err := rl.Readline()
+		if err == readline.ErrInterrupt {
 			continue
+		}
+		if err == io.EOF {
+			fmt.Println()
+			return
 		}
 
 		line = strings.TrimSpace(line)
@@ -144,87 +153,21 @@ func main() {
 			continue
 		}
 
-		var stdoutFile *os.File
-		var stderrFile *os.File
-		clean := []string{}
-
-		// --- handle redirections ---
-		for i := 0; i < len(fields); i++ {
-			switch fields[i] {
-
-			case ">", "1>":
-				if i+1 < len(fields) {
-					f, err := os.Create(fields[i+1])
-					if err == nil {
-						stdoutFile = f
-					}
-					i++
-				}
-
-			case ">>", "1>>":
-				if i+1 < len(fields) {
-					f, err := os.OpenFile(
-						fields[i+1],
-						os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-						0644,
-					)
-					if err == nil {
-						stdoutFile = f
-					}
-					i++
-				}
-
-			case "2>":
-				if i+1 < len(fields) {
-					f, err := os.Create(fields[i+1])
-					if err == nil {
-						stderrFile = f
-					}
-					i++
-				}
-
-			case "2>>":
-				if i+1 < len(fields) {
-					f, err := os.OpenFile(
-						fields[i+1],
-						os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-						0644,
-					)
-					if err == nil {
-						stderrFile = f
-					}
-					i++
-				}
-
-			default:
-				clean = append(clean, fields[i])
-			}
-		}
-
-		cmd := clean[0]
-		args := clean[1:]
+		cmd := fields[0]
+		args := fields[1:]
 
 		if cmd == "exit" {
 			return
 		}
 
-		stdout := os.Stdout
-		stderr := os.Stderr
-		if stdoutFile != nil {
-			stdout = stdoutFile
-		}
-		if stderrFile != nil {
-			stderr = stderrFile
-		}
-
 		switch cmd {
 
 		case "echo":
-			fmt.Fprintln(stdout, strings.Join(args, " "))
+			fmt.Println(strings.Join(args, " "))
 
 		case "pwd":
 			dir, _ := os.Getwd()
-			fmt.Fprintln(stdout, dir)
+			fmt.Println(dir)
 
 		case "cd":
 			builtinCd(args)
@@ -236,20 +179,20 @@ func main() {
 			name := args[0]
 
 			if builtins[name] {
-				fmt.Fprintf(stdout, "%s is a shell builtin\n", name)
+				fmt.Printf("%s is a shell builtin\n", name)
 				continue
 			}
 
 			if full, err := locateExecutable(name, pathEnv); err == nil {
-				fmt.Fprintf(stdout, "%s is %s\n", name, full)
+				fmt.Printf("%s is %s\n", name, full)
 			} else {
-				fmt.Fprintf(stderr, "%s: not found\n", name)
+				fmt.Printf("%s: not found\n", name)
 			}
 
 		default:
 			full, err := locateExecutable(cmd, pathEnv)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s: command not found\n", cmd)
+				fmt.Printf("%s: command not found\n", cmd)
 				continue
 			}
 
@@ -257,17 +200,10 @@ func main() {
 				Path:   full,
 				Args:   append([]string{cmd}, args...),
 				Stdin:  os.Stdin,
-				Stdout: stdout,
-				Stderr: stderr,
+				Stdout: os.Stdout,
+				Stderr: os.Stderr,
 			}
 			_ = command.Run()
-		}
-
-		if stdoutFile != nil {
-			stdoutFile.Close()
-		}
-		if stderrFile != nil {
-			stderrFile.Close()
 		}
 	}
 }

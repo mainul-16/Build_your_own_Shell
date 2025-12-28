@@ -26,6 +26,17 @@ func main() {
 			return
 		}
 
+		// pwd builtin
+		if line == "pwd" {
+			cwd, err := os.Getwd()
+			if err != nil {
+				fmt.Println("pwd: error retrieving current directory")
+			} else {
+				fmt.Println(cwd)
+			}
+			continue
+		}
+
 		// echo builtin
 		if strings.HasPrefix(line, "echo") {
 			if len(line) > 4 {
@@ -40,7 +51,8 @@ func main() {
 		if strings.HasPrefix(line, "type ") {
 			arg := strings.TrimSpace(strings.TrimPrefix(line, "type "))
 
-			if arg == "exit" || arg == "echo" || arg == "type" {
+			// 🔥 FIX: include pwd as builtin
+			if arg == "exit" || arg == "echo" || arg == "type" || arg == "pwd" {
 				fmt.Printf("%s is a shell builtin\n", arg)
 				continue
 			}
@@ -54,9 +66,7 @@ func main() {
 			continue
 		}
 
-		// -----------------------------
-		// external commands (FIXED)
-		// -----------------------------
+		// external commands
 		if line != "" {
 			parts := strings.Fields(line)
 
@@ -68,7 +78,7 @@ func main() {
 
 			cmd := &exec.Cmd{
 				Path:   path,
-				Args:   append([]string{parts[0]}, parts[1:]...), // argv[0] FIXED
+				Args:   append([]string{parts[0]}, parts[1:]...),
 				Stdin:  os.Stdin,
 				Stdout: os.Stdout,
 				Stderr: os.Stderr,

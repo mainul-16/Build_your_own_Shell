@@ -72,7 +72,7 @@ func main() {
 					fmt.Println()
 					return
 				}
-				continue
+				break
 			}
 
 			if ch == '\n' {
@@ -115,6 +115,7 @@ func main() {
 
 		tokens := strings.Fields(line)
 		cmd := tokens[0]
+		handled := false
 
 		/* ---------- UN3: ls handling ---------- */
 		if cmd == "ls" {
@@ -137,16 +138,14 @@ func main() {
 			if path != "" {
 				if _, err := os.Stat(path); err != nil {
 					msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
-
-					// print error to terminal
 					fmt.Print(msg)
 
-					// >> : create empty stdout file
+					// create empty stdout file
 					if redirectOut != "" {
 						os.OpenFile(redirectOut, os.O_CREATE, 0644)
 					}
 
-					// 2>> : append error
+					// append stderr
 					if redirectErr != "" {
 						f, _ := os.OpenFile(
 							redirectErr,
@@ -156,9 +155,14 @@ func main() {
 						f.WriteString(msg)
 						f.Close()
 					}
-					continue
+
+					handled = true
 				}
 			}
+		}
+
+		if handled {
+			continue
 		}
 
 		fmt.Printf("%s: command not found\n", line)

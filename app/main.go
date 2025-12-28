@@ -28,12 +28,32 @@ func parseCommand(line string) []string {
 	for i := 0; i < len(line); i++ {
 		ch := line[i]
 
-		// Backslash escaping (outside quotes only)
-		if ch == '\\' && !inSingle && !inDouble {
-			if i+1 < len(line) {
-				current.WriteByte(line[i+1])
-				i++
+		// Backslash handling
+		if ch == '\\' {
+			if !inSingle && !inDouble {
+				if i+1 < len(line) {
+					current.WriteByte(line[i+1])
+					i++
+				}
+				continue
 			}
+
+			if inDouble {
+				if i+1 < len(line) {
+					next := line[i+1]
+					if next == '"' || next == '\\' {
+						current.WriteByte(next)
+						i++
+					} else {
+						current.WriteByte('\\')
+					}
+				} else {
+					current.WriteByte('\\')
+				}
+				continue
+			}
+
+			current.WriteByte('\\')
 			continue
 		}
 

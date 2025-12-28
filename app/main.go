@@ -18,6 +18,38 @@ var builtins = map[string]bool{
 	"cd":   true,
 }
 
+func parseCommand(line string) []string {
+	var args []string
+	var current strings.Builder
+	inSingleQuote := false
+
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+
+		switch ch {
+		case '\'':
+			inSingleQuote = !inSingleQuote
+
+		case ' ', '\t':
+			if inSingleQuote {
+				current.WriteByte(ch)
+			} else if current.Len() > 0 {
+				args = append(args, current.String())
+				current.Reset()
+			}
+
+		default:
+			current.WriteByte(ch)
+		}
+	}
+
+	if current.Len() > 0 {
+		args = append(args, current.String())
+	}
+
+	return args
+}
+
 func builtinCd(args []string) {
 	if len(args) == 0 {
 		return
@@ -60,7 +92,11 @@ func main() {
 			continue
 		}
 
-		fields := strings.Fields(line)
+		fields := parseCommand(line)
+		if len(fields) == 0 {
+			continue
+		}
+
 		cmd := fields[0]
 		args := fields[1:]
 
@@ -107,7 +143,7 @@ func main() {
 
 			command := &exec.Cmd{
 				Path:   full,
-				Args:   append([]string{cmd}, args...), // 🔥 FIX HERE
+				Args:   append([]string{cmd}, args...),
 				Stdin:  os.Stdin,
 				Stdout: os.Stdout,
 				Stderr: os.Stderr,

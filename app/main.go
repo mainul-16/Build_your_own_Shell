@@ -1,14 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/chzyer/readline"
 )
 
 var builtins = map[string]bool{
@@ -17,6 +16,24 @@ var builtins = map[string]bool{
 	"type": true,
 	"pwd":  true,
 	"cd":   true,
+}
+
+/* ---------------- AUTOCOMPLETE ---------------- */
+
+func handleAutocomplete(line string) (string, bool) {
+	line = strings.TrimSuffix(line, "\n")
+
+	if strings.HasSuffix(line, "\t") {
+		prefix := strings.TrimSuffix(line, "\t")
+
+		if strings.HasPrefix("echo", prefix) {
+			return "echo ", true
+		}
+		if strings.HasPrefix("exit", prefix) {
+			return "exit ", true
+		}
+	}
+	return "", false
 }
 
 /* ---------------- PARSER ---------------- */
@@ -119,28 +136,25 @@ func builtinCd(args []string) {
 /* ---------------- MAIN ---------------- */
 
 func main() {
-	rl, err := readline.NewEx(&readline.Config{
-		Prompt: "$ ",
-		AutoComplete: readline.NewPrefixCompleter(
-			readline.PcItem("echo"),
-			readline.PcItem("exit"),
-		),
-	})
-	if err != nil {
-		panic(err)
-	}
-	defer rl.Close()
-
+	reader := bufio.NewReader(os.Stdin)
 	pathEnv := os.Getenv("PATH")
 
 	for {
-		line, err := rl.Readline()
-		if err == readline.ErrInterrupt {
+		fmt.Print("$ ")
+
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println()
+				return
+			}
 			continue
 		}
-		if err == io.EOF {
-			fmt.Println()
-			return
+
+		// 🔥 AUTOCOMPLETE HANDLING
+		if completed, ok := handleAutocomplete(line); ok {
+			fmt.Println(completed)
+			continue
 		}
 
 		line = strings.TrimSpace(line)

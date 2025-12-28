@@ -17,36 +17,32 @@ var builtins = map[string]bool{
 	"cd":   true,
 }
 
+/* ---------------- AUTOCOMPLETE ---------------- */
+
+func autocomplete(prefix string) (string, bool) {
+	if strings.HasPrefix("echo", prefix) {
+		return "echo ", true
+	}
+	if strings.HasPrefix("exit", prefix) {
+		return "exit ", true
+	}
+	return "", false
+}
+
 /* ---------------- PARSER ---------------- */
 
 func parseCommand(line string) []string {
 	var args []string
 	var current strings.Builder
-
-	inSingle := false
-	inDouble := false
+	inSingle, inDouble := false, false
 
 	for i := 0; i < len(line); i++ {
 		ch := line[i]
 
 		if ch == '\\' {
-			if !inSingle && !inDouble {
-				if i+1 < len(line) {
-					current.WriteByte(line[i+1])
-					i++
-				}
-				continue
-			}
-			if inDouble {
-				if i+1 < len(line) {
-					next := line[i+1]
-					if next == '"' || next == '\\' {
-						current.WriteByte(next)
-						i++
-					} else {
-						current.WriteByte('\\')
-					}
-				}
+			if !inSingle && !inDouble && i+1 < len(line) {
+				current.WriteByte(line[i+1])
+				i++
 				continue
 			}
 			current.WriteByte('\\')
@@ -82,18 +78,6 @@ func parseCommand(line string) []string {
 		args = append(args, current.String())
 	}
 	return args
-}
-
-/* ---------------- AUTOCOMPLETE ---------------- */
-
-func autocomplete(prefix string) (string, bool) {
-	if strings.HasPrefix("echo", prefix) {
-		return "echo ", true
-	}
-	if strings.HasPrefix("exit", prefix) {
-		return "exit ", true
-	}
-	return "", false
 }
 
 /* ---------------- BUILTINS ---------------- */
@@ -137,7 +121,8 @@ func main() {
 			// TAB → autocomplete
 			if ch == '\t' {
 				if completed, ok := autocomplete(buffer); ok {
-					fmt.Print("\r$ ")
+					// 🔥 clear line + redraw
+					fmt.Print("\r\033[K$ ")
 					fmt.Print(completed)
 					buffer = strings.TrimSpace(completed)
 				}
@@ -163,14 +148,21 @@ func main() {
 		}
 
 		switch cmd {
+
 		case "echo":
 			fmt.Println(strings.Join(args, " "))
+
 		case "pwd":
 			dir, _ := os.Getwd()
 			fmt.Println(dir)
+
 		case "cd":
 			builtinCd(args)
+
 		case "type":
+			if len(args) == 0 {
+				continue
+			}
 			if builtins[args[0]] {
 				fmt.Printf("%s is a shell builtin\n", args[0])
 				continue
@@ -180,6 +172,7 @@ func main() {
 			} else {
 				fmt.Printf("%s: not found\n", args[0])
 			}
+
 		default:
 			full, err := locateExecutable(cmd, pathEnv)
 			if err != nil {

@@ -1,208 +1,124 @@
-package main
+package shell
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
-	"golang.org/x/sys/unix"
+	"github.com/chzyer/readline"
+	"github.com/codecrafters-io/shell-starter-go/internal/handlers"
+	"github.com/codecrafters-io/shell-starter-go/internal/parser"
+	"github.com/codecrafters-io/shell-starter-go/internal/router"
 )
 
-/* ---------------- TERMINAL RAW MODE ---------------- */
-
-func enableRawMode() func() {
-	fd := int(os.Stdin.Fd())
-
-	oldState, err := unix.IoctlGetTermios(fd, unix.TCGETS)
-	if err != nil {
-		return func() {}
-	}
-
-	newState := *oldState
-	newState.Lflag &^= unix.ICANON | unix.ECHO
-	newState.Cc[unix.VMIN] = 1
-	newState.Cc[unix.VTIME] = 0
-
-	_ = unix.IoctlSetTermios(fd, unix.TCSETS, &newState)
-
-	return func() {
-		_ = unix.IoctlSetTermios(fd, unix.TCSETS, oldState)
-	}
-}
-
-/* ---------------- AUTOCOMPLETE ---------------- */
-
-func autocomplete(input string) (string, bool) {
-	builtins := []string{"echo", "exit"}
-
-	for _, b := range builtins {
-		if strings.HasPrefix(b, input) {
-			return b + " ", true
-		}
-	}
-	return input, false
-}
-
-/* ---------------- BUILTINS ---------------- */
-
-var builtins = map[string]bool{
-	"echo": true,
-	"exit": true,
-	"type": true,
-	"pwd":  true,
-	"cd":   true,
-}
-
-func builtinCd(args []string) {
-	if len(args) == 0 {
-		return
-	}
-
-	path := args[0]
-	if path == "~" {
-		home := os.Getenv("HOME")
-		if home == "" {
-			fmt.Printf("cd: ~: No such file or directory\n")
-			return
-		}
-		path = home
-	}
-
-	if err := os.Chdir(path); err != nil {
-		fmt.Printf("cd: %s: No such file or directory\n", args[0])
-	}
-}
-
-/* ---------------- MAIN ---------------- */
-
-func main() {
-	restore := enableRawMode()
-	defer restore()
-
-	pathEnv := os.Getenv("PATH")
-	reader := bufio.NewReader(os.Stdin)
-
+func ListenAndServe(r router.Router) error {
+	completer := readline.NewPrefixCompleter(
+		readline.PcItem("echo"),
+		readline.PcItem("exit"),
+		readline.PcItem("cd"),
+		readline.PcItem("pwd"),
+		readline.PcItem("type"),
+	)
+	rl, _ := readline.NewEx(&readline.Config{
+		Prompt:       "$ ",
+		AutoComplete: completer,
+	})
 	for {
-		fmt.Print("$ ")
-
-		var line strings.Builder
-
-		// ----- READ INPUT BYTE BY BYTE -----
-		for {
-			ch, err := reader.ReadByte()
-			if err != nil {
-				if err == io.EOF {
-					fmt.Println()
-					return
-				}
-				continue
-			}
-
-			// ENTER
-			if ch == '\n' {
-				fmt.Println()
-				break
-			}
-
-			// TAB
-			if ch == '\t' {
-				current := line.String()
-				completed, ok := autocomplete(current)
-				if ok {
-					fmt.Print("\r$ ")
-					fmt.Print(completed)
-					line.Reset()
-					line.WriteString(completed)
-				}
-				continue
-			}
-
-			// NORMAL CHARACTER
-			line.WriteByte(ch)
-			fmt.Printf("%c", ch)
+		command, err := rl.Readline()
+		if err != nil {
+			return errors.New(fmt.Sprintf("Error reading input: %v\n", err))
 		}
 
-		commandLine := strings.TrimSpace(line.String())
-		if commandLine == "" {
+		op, parseinfo := parser.Parse(command)
+
+		if op == "" {
 			continue
 		}
 
-		fields := strings.Fields(commandLine)
-		cmd := fields[0]
-		args := fields[1:]
+		out, err := r.Run(op, parseinfo.Arguments)
 
-		if cmd == "exit" {
-			return
+		if errors.Is(err, handlers.ErrShellExit) {
+			return err
 		}
 
-		switch cmd {
-
-		case "echo":
-			fmt.Println(strings.Join(args, " "))
-
-		case "pwd":
-			dir, _ := os.Getwd()
-			fmt.Println(dir)
-
-		case "cd":
-			builtinCd(args)
-
-		case "type":
-			if len(args) == 0 {
-				continue
-			}
-			name := args[0]
-
-			if builtins[name] {
-				fmt.Printf("%s is a shell builtin\n", name)
-				continue
-			}
-
-			if full, err := locateExecutable(name, pathEnv); err == nil {
-				fmt.Printf("%s is %s\n", name, full)
-			} else {
-				fmt.Printf("%s: not found\n", name)
-			}
-
-		default:
-			full, err := locateExecutable(cmd, pathEnv)
-			if err != nil {
-				fmt.Printf("%s: command not found\n", cmd)
-				continue
-			}
-
-			command := &exec.Cmd{
-				Path:   full,
-				Args:   append([]string{cmd}, args...),
-				Stdin:  os.Stdin,
-				Stdout: os.Stdout,
-				Stderr: os.Stderr,
-			}
-			_ = command.Run()
+		if errors.Is(err, handlers.ErrNoSuchFileOrDirectory) {
+			writeError(err, parseinfo)
+			continue
 		}
+
+		if errors.Is(err, handlers.ErrCommandNotFound) {
+			writeError(err, parseinfo)
+			continue
+		}
+
+		if errors.Is(err, handlers.ErrNotFound) {
+			writeError(err, parseinfo)
+			continue
+		}
+
+		/*
+			if no error but error output file provided
+			should create empty file
+		*/
+		writeLine(out, parseinfo)
+		writeError(err, parseinfo)
 	}
 }
 
-/* ---------------- HELPERS ---------------- */
-
-func locateExecutable(cmd, pathEnv string) (string, error) {
-	for _, dir := range strings.Split(pathEnv, ":") {
-		full := filepath.Join(dir, cmd)
-		if isExecutable(full) {
-			return full, nil
-		}
+func writeLine(s string, info parser.ParsedInfo) {
+	if s == "" && info.OutputRedirectsRest == nil && info.OutputRedirectsNew == nil {
+		return
 	}
-	return "", fmt.Errorf("not found")
+
+	if info.OutputRedirectsRest == nil && info.OutputRedirectsNew == nil {
+		fmt.Fprintln(os.Stdout, strings.TrimRight(s, "\n"))
+		return
+	}
+
+	for _, outPath := range info.OutputRedirectsNew {
+		file, _ := os.OpenFile(outPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if s != "" {
+			fmt.Fprintln(file, strings.TrimRight(s, "\n"))
+		}
+		_ = file.Close()
+	}
+
+	for _, outPath := range info.OutputRedirectsRest {
+		file, _ := os.OpenFile(outPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+
+		if s != "" {
+			fmt.Fprintln(file, strings.TrimRight(s, "\n"))
+		}
+		_ = file.Close()
+	}
 }
 
-func isExecutable(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() {
-		return false
+func writeError(err error, info parser.ParsedInfo) {
+	var msg string
+
+	if err != nil {
+		msg = err.Error()
 	}
-	return info.Mode()&0111 != 0
+
+	for _, errPath := range info.ErrRedirectNew {
+		file, _ := os.OpenFile(errPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if msg != "" {
+			fmt.Fprintln(file, strings.TrimRight(msg, "\n"))
+		}
+		_ = file.Close()
+	}
+
+	for _, errPath := range info.ErrRedirectRest {
+		file, _ := os.OpenFile(errPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if msg != "" {
+			fmt.Fprintln(file, strings.TrimRight(msg, "\n"))
+		}
+
+		_ = file.Close()
+	}
+
+	if msg != "" && info.ErrRedirectRest == nil && info.ErrRedirectNew == nil {
+		fmt.Fprintln(os.Stdout, strings.TrimRight(msg, "\n"))
+	}
 }

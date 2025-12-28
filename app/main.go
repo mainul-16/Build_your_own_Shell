@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package main
 
 import (
@@ -102,12 +105,12 @@ func main() {
 			continue
 		}
 
-		/* ----- EXIT BUILTIN ----- */
+		/* ----- EXIT ----- */
 		if line == "exit" {
 			return
 		}
 
-		/* ----- ECHO BUILTIN ----- */
+		/* ----- ECHO ----- */
 		if strings.HasPrefix(line, "echo ") {
 			fmt.Println(strings.TrimPrefix(line, "echo "))
 			continue
@@ -116,35 +119,35 @@ func main() {
 		/* ---------- UN3: APPEND STDERR ---------- */
 
 		tokens := strings.Fields(line)
-		if len(tokens) >= 4 {
-			for i := 0; i < len(tokens); i++ {
-				if tokens[i] == ">>" {
-					cmd := tokens[0]
-					outFile := tokens[i+1]
+		for i := 0; i < len(tokens); i++ {
+			if tokens[i] == ">>" && i+1 < len(tokens) {
+				cmd := tokens[0]
+				outFile := tokens[i+1]
 
-					// Only ls error handling needed for UN3
-					if cmd == "ls" {
-						// path is last argument before >>
-						path := tokens[i-1]
+				if cmd == "ls" {
+					path := tokens[i-1]
 
-						if _, err := os.Stat(path); err != nil {
-							msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
+					if _, err := os.Stat(path); err != nil {
+						msg := fmt.Sprintf("ls: %s: No such file or directory\n", path)
 
-							f, _ := os.OpenFile(
-								outFile,
-								os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-								0644,
-							)
-							f.WriteString(msg)
-							f.Close()
-							goto PROMPT
-						}
+						// ✅ PRINT TO TERMINAL
+						fmt.Print(msg)
+
+						// ✅ APPEND TO FILE
+						f, _ := os.OpenFile(
+							outFile,
+							os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+							0644,
+						)
+						f.WriteString(msg)
+						f.Close()
+						goto PROMPT
 					}
 				}
 			}
 		}
 
-		/* ----- DEFAULT FALLBACK ----- */
+		/* ----- FALLBACK ----- */
 		fmt.Printf("%s: command not found\n", line)
 
 	PROMPT:

@@ -8,7 +8,46 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
+
+/* ---------------- TERMINAL RAW MODE ---------------- */
+
+func enableRawMode() func() {
+	fd := int(os.Stdin.Fd())
+
+	oldState, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	if err != nil {
+		return func() {}
+	}
+
+	newState := *oldState
+	newState.Lflag &^= unix.ICANON | unix.ECHO
+	newState.Cc[unix.VMIN] = 1
+	newState.Cc[unix.VTIME] = 0
+
+	_ = unix.IoctlSetTermios(fd, unix.TCSETS, &newState)
+
+	return func() {
+		_ = unix.IoctlSetTermios(fd, unix.TCSETS, oldState)
+	}
+}
+
+/* ---------------- AUTOCOMPLETE ---------------- */
+
+func autocomplete(input string) (string, bool) {
+	builtins := []string{"echo", "exit"}
+
+	for _, b := range builtins {
+		if strings.HasPrefix(b, input) {
+			return b + " ", true
+		}
+	}
+	return input, false
+}
+
+/* ---------------- BUILTINS ---------------- */
 
 var builtins = map[string]bool{
 	"echo": true,
@@ -17,84 +56,6 @@ var builtins = map[string]bool{
 	"pwd":  true,
 	"cd":   true,
 }
-
-/* ---------------- PARSER ---------------- */
-
-func parseCommand(line string) []string {
-	var args []string
-	var current strings.Builder
-
-	inSingle := false
-	inDouble := false
-
-	for i := 0; i < len(line); i++ {
-		ch := line[i]
-
-		// Backslash handling
-		if ch == '\\' {
-			if !inSingle && !inDouble {
-				if i+1 < len(line) {
-					current.WriteByte(line[i+1])
-					i++
-				}
-				continue
-			}
-
-			if inDouble {
-				if i+1 < len(line) {
-					next := line[i+1]
-					if next == '"' || next == '\\' {
-						current.WriteByte(next)
-						i++
-					} else {
-						current.WriteByte('\\')
-					}
-				} else {
-					current.WriteByte('\\')
-				}
-				continue
-			}
-
-			current.WriteByte('\\')
-			continue
-		}
-
-		switch ch {
-		case '\'':
-			if !inDouble {
-				inSingle = !inSingle
-			} else {
-				current.WriteByte(ch)
-			}
-
-		case '"':
-			if !inSingle {
-				inDouble = !inDouble
-			} else {
-				current.WriteByte(ch)
-			}
-
-		case ' ', '\t':
-			if inSingle || inDouble {
-				current.WriteByte(ch)
-			} else if current.Len() > 0 {
-				args = append(args, current.String())
-				current.Reset()
-			}
-
-		default:
-			current.WriteByte(ch)
-		}
-	}
-
-	if current.Len() > 0 {
-		args = append(args, current.String())
-	}
-
-	return args
-}
-
-/* ---------------- BUILTINS ---------------- */
 
 func builtinCd(args []string) {
 	if len(args) == 0 {
@@ -119,112 +80,73 @@ func builtinCd(args []string) {
 /* ---------------- MAIN ---------------- */
 
 func main() {
+	restore := enableRawMode()
+	defer restore()
+
 	pathEnv := os.Getenv("PATH")
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
 		fmt.Print("$ ")
 
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
+		var line strings.Builder
+
+		// ----- READ INPUT BYTE BY BYTE -----
+		for {
+			ch, err := reader.ReadByte()
+			if err != nil {
+				if err == io.EOF {
+					fmt.Println()
+					return
+				}
+				continue
+			}
+
+			// ENTER
+			if ch == '\n' {
 				fmt.Println()
-				return
+				break
 			}
-			continue
-		}
 
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		fields := parseCommand(line)
-		if len(fields) == 0 {
-			continue
-		}
-
-		var stdoutFile *os.File
-		var stderrFile *os.File
-		clean := []string{}
-
-		// --- handle redirections ---
-		for i := 0; i < len(fields); i++ {
-			switch fields[i] {
-
-			case ">", "1>":
-				if i+1 < len(fields) {
-					f, err := os.Create(fields[i+1])
-					if err == nil {
-						stdoutFile = f
-					}
-					i++
+			// TAB
+			if ch == '\t' {
+				current := line.String()
+				completed, ok := autocomplete(current)
+				if ok {
+					fmt.Print("\r$ ")
+					fmt.Print(completed)
+					line.Reset()
+					line.WriteString(completed)
 				}
-
-			case ">>", "1>>":
-				if i+1 < len(fields) {
-					f, err := os.OpenFile(
-						fields[i+1],
-						os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-						0644,
-					)
-					if err == nil {
-						stdoutFile = f
-					}
-					i++
-				}
-
-			case "2>":
-				if i+1 < len(fields) {
-					f, err := os.Create(fields[i+1])
-					if err == nil {
-						stderrFile = f
-					}
-					i++
-				}
-
-			case "2>>":
-				if i+1 < len(fields) {
-					f, err := os.OpenFile(
-						fields[i+1],
-						os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-						0644,
-					)
-					if err == nil {
-						stderrFile = f
-					}
-					i++
-				}
-
-			default:
-				clean = append(clean, fields[i])
+				continue
 			}
+
+			// NORMAL CHARACTER
+			line.WriteByte(ch)
+			fmt.Printf("%c", ch)
 		}
 
-		cmd := clean[0]
-		args := clean[1:]
+		commandLine := strings.TrimSpace(line.String())
+		if commandLine == "" {
+			continue
+		}
+
+		fields := strings.Fields(commandLine)
+		cmd := fields[0]
+		args := fields[1:]
 
 		if cmd == "exit" {
 			return
 		}
 
-		stdout := os.Stdout
-		stderr := os.Stderr
-		if stdoutFile != nil {
-			stdout = stdoutFile
-		}
-		if stderrFile != nil {
-			stderr = stderrFile
-		}
-
 		switch cmd {
 
 		case "echo":
-			fmt.Fprintln(stdout, strings.Join(args, " "))
+			fmt.Println(strings.Join(args, " "))
 
 		case "pwd":
 			dir, _ := os.Getwd()
-			fmt.Fprintln(stdout, dir)
+			fmt.Println(dir)
 
 		case "cd":
 			builtinCd(args)
@@ -236,20 +158,20 @@ func main() {
 			name := args[0]
 
 			if builtins[name] {
-				fmt.Fprintf(stdout, "%s is a shell builtin\n", name)
+				fmt.Printf("%s is a shell builtin\n", name)
 				continue
 			}
 
 			if full, err := locateExecutable(name, pathEnv); err == nil {
-				fmt.Fprintf(stdout, "%s is %s\n", name, full)
+				fmt.Printf("%s is %s\n", name, full)
 			} else {
-				fmt.Fprintf(stderr, "%s: not found\n", name)
+				fmt.Printf("%s: not found\n", name)
 			}
 
 		default:
 			full, err := locateExecutable(cmd, pathEnv)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s: command not found\n", cmd)
+				fmt.Printf("%s: command not found\n", cmd)
 				continue
 			}
 
@@ -257,17 +179,10 @@ func main() {
 				Path:   full,
 				Args:   append([]string{cmd}, args...),
 				Stdin:  os.Stdin,
-				Stdout: stdout,
-				Stderr: stderr,
+				Stdout: os.Stdout,
+				Stderr: os.Stderr,
 			}
 			_ = command.Run()
-		}
-
-		if stdoutFile != nil {
-			stdoutFile.Close()
-		}
-		if stderrFile != nil {
-			stderrFile.Close()
 		}
 	}
 }

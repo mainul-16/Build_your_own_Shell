@@ -3,42 +3,46 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/chzyer/readline"
 )
 
-func main() {
-	builtins := []string{"echo", "exit", "type", "pwd", "cd"}
+type BuiltinCompleter struct {
+	builtins []string
+}
 
+func (c *BuiltinCompleter) Do(line []rune, pos int) ([][]rune, int) {
+	prefix := string(line[:pos])
+	matches := [][]rune{}
+
+	for _, b := range c.builtins {
+		if strings.HasPrefix(b, prefix) {
+			matches = append(matches, []rune(b[len(prefix):]+" "))
+		}
+	}
+
+	// ❗ no match → ring bell, do nothing
+	if len(matches) == 0 {
+		os.Stdout.Write([]byte("\x07")) // bell
+		return nil, 0
+	}
+
+	// single match → autocomplete
+	if len(matches) == 1 {
+		return matches, len(prefix)
+	}
+
+	return nil, 0
+}
+
+func main() {
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt: "$ ",
-		AutoComplete: readline.AutoCompleterFunc(
-			func(line []rune, pos int) ([][]rune, int) {
-				input := string(line[:pos])
-				matches := [][]rune{}
-
-				for _, b := range builtins {
-					if strings.HasPrefix(b, input) {
-						matches = append(matches, []rune(b[len(input):]+" "))
-					}
-				}
-
-				// ✅ NO MATCH → ring bell, return nothing
-				if len(matches) == 0 {
-					readline.Bell()
-					return nil, 0
-				}
-
-				// 1 match → autocomplete
-				if len(matches) == 1 {
-					return matches, len(input)
-				}
-
-				// >1 match → do nothing (future stage)
-				return nil, 0
-			},
-		),
+		AutoComplete: &BuiltinCompleter{
+			builtins: []string{"echo", "exit", "type", "pwd", "cd"},
+		},
 	})
 	if err != nil {
 		panic(err)
@@ -49,8 +53,9 @@ func main() {
 		line, err := rl.Readline()
 		if err == readline.ErrInterrupt {
 			continue
-		} else if err == io.EOF {
-			break
+		}
+		if err == io.EOF {
+			return
 		}
 
 		line = strings.TrimSpace(line)

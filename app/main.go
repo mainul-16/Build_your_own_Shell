@@ -54,8 +54,8 @@ func main() {
 					buf = append(buf, ' ')
 					fmt.Print(" ")
 				} else {
-					// 🔔 bell + no change
-					fmt.Print("\x07")
+					// 🔔 IMPORTANT FIX: real bell
+					os.Stdout.Write([]byte{7})
 				}
 				continue
 			}

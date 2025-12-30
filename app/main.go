@@ -1,64 +1,80 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"strings"
-
-	"github.com/chzyer/readline"
 )
 
-type BuiltinCompleter struct {
-	builtins []string
-}
-
-func (c *BuiltinCompleter) Do(line []rune, pos int) ([][]rune, int) {
-	prefix := string(line[:pos])
-	matches := [][]rune{}
-
-	for _, b := range c.builtins {
-		if strings.HasPrefix(b, prefix) {
-			matches = append(matches, []rune(b[len(prefix):]+" "))
-		}
-	}
-
-	// ❗ no match → ring bell, do nothing
-	if len(matches) == 0 {
-		os.Stdout.Write([]byte("\x07")) // bell
-		return nil, 0
-	}
-
-	// single match → autocomplete
-	if len(matches) == 1 {
-		return matches, len(prefix)
-	}
-
-	return nil, 0
+var builtins = []string{
+	"echo",
+	"exit",
+	"type",
+	"pwd",
+	"cd",
 }
 
 func main() {
-	rl, err := readline.NewEx(&readline.Config{
-		Prompt: "$ ",
-		AutoComplete: &BuiltinCompleter{
-			builtins: []string{"echo", "exit", "type", "pwd", "cd"},
-		},
-	})
-	if err != nil {
-		panic(err)
-	}
-	defer rl.Close()
+	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		line, err := rl.Readline()
-		if err == readline.ErrInterrupt {
-			continue
-		}
-		if err == io.EOF {
-			return
+		fmt.Print("$ ")
+		var buf []rune
+
+		for {
+			ch, err := reader.ReadByte()
+			if err != nil {
+				return
+			}
+
+			// ENTER
+			if ch == '\n' {
+				fmt.Println()
+				break
+			}
+
+			// TAB
+			if ch == '\t' {
+				input := string(buf)
+				matches := []string{}
+
+				for _, b := range builtins {
+					if strings.HasPrefix(b, input) {
+						matches = append(matches, b)
+					}
+				}
+
+				if len(matches) == 1 {
+					rest := matches[0][len(input):]
+					for _, r := range rest {
+						buf = append(buf, r)
+						fmt.Printf("%c", r)
+					}
+					buf = append(buf, ' ')
+					fmt.Print(" ")
+				} else {
+					// 🔔 bell + no change
+					fmt.Print("\x07")
+				}
+				continue
+			}
+
+			// BACKSPACE
+			if ch == 127 {
+				if len(buf) > 0 {
+					buf = buf[:len(buf)-1]
+					fmt.Print("\b \b")
+				}
+				continue
+			}
+
+			// NORMAL CHAR
+			buf = append(buf, rune(ch))
+			fmt.Printf("%c", ch)
 		}
 
-		line = strings.TrimSpace(line)
+		line := strings.TrimSpace(string(buf))
 		if line == "" {
 			continue
 		}

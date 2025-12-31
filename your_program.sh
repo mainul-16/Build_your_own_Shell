@@ -1,25 +1,24 @@
-#!/usr/bin/env sh
+#!/bin/sh
+#
+# Use this script to run your program LOCALLY.
+#
+# Note: Changing this script WILL NOT affect how CodeCrafters runs your program.
+#
+# Learn more: https://codecrafters.io/program-interface
 
-while true; do
-  printf "$ "
-  read -r line || exit 0
+set -e # Exit early if any commands fail
 
-  # exit builtin
-  if [ "$line" = "exit" ]; then
-    exit 0
-  fi
+# Copied from .codecrafters/compile.sh
+#
+# - Edit this to change how your program compiles locally
+# - Edit .codecrafters/compile.sh to change how your program compiles remotely
+(
+  cd "$(dirname "$0")" # Ensure compile steps are run within the repository directory
+  go build -o /tmp/codecrafters-build-shell-go app/*.go
+)
 
-  # echo builtin: print everything after the first space
-  case "$line" in
-    echo\ *)
-      printf "%s\n" "${line#* }"
-      ;;
-    echo)
-      printf "\n"
-      ;;
-    *)
-      [ -z "$line" ] && continue
-      printf "%s: command not found\n" "${line%% *}"
-      ;;
-  esac
-done
+# Copied from .codecrafters/run.sh
+#
+# - Edit this to change how your program runs locally
+# - Edit .codecrafters/run.sh to change how your program runs remotely
+exec /tmp/codecrafters-build-shell-go "$@"

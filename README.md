@@ -27,6 +27,114 @@ Time to move on to the next stage!
 
 Note: This section is for stages 2 and beyond.
 
+<hr>
+<h1 align="center">Build Your Own Shell (Go)</h1>
+
+<p align="center">
+  A custom Unix-like shell implemented in Go with support for built-in commands,
+  pipelines, redirection, history, and autocompletion.
+</p>
+
+<hr/>
+
+<h2>🚀 Features</h2>
+<ul>
+  <li>Interactive shell with custom prompt</li>
+  <li>Built-in commands: <code>exit</code>, <code>cd</code>, <code>pwd</code>, <code>echo</code>, <code>type</code>, <code>history</code></li>
+  <li>Pipeline support (<code>|</code>)</li>
+  <li>Input/output redirection (<code>&gt;</code>, <code>&gt;&gt;</code>, <code>2&gt;</code>)</li>
+  <li>Command history with file persistence</li>
+  <li>Tab autocompletion</li>
+</ul>
+
+<hr/>
+
+<h2>📦 Requirements</h2>
+<ul>
+  <li>Go <strong>1.25+</strong></li>
+  <li>Linux / macOS / WSL (Windows Subsystem for Linux)</li>
+</ul>
+
+<hr/>
+
+<h2>⚙️ How to Run (Local Execution)</h2>
+
+<ol>
+  <li>
+    <strong>Clone the repository</strong>
+    <pre><code>git clone https://github.com/mainul-16/Build_your_own_Shell.git
+cd Build_your_own_Shell</code></pre>
+  </li>
+
+  <li>
+    <strong>Navigate to the source directory</strong>
+    <pre><code>cd app</code></pre>
+  </li>
+
+  <li>
+    <strong>Build the shell</strong>
+    <pre><code>go build -o myshell</code></pre>
+  </li>
+
+  <li>
+    <strong>Launch the shell</strong>
+    <pre><code>./myshell</code></pre>
+  </li>
+</ol>
+
+<p>You should now see an interactive shell prompt:</p>
+<pre><code>$ pwd
+$ echo hello
+hello</code></pre>
+
+<hr/>
+
+<h2>🐳 Docker (Local Testing)</h2>
+
+<p>
+This project was also tested using Docker for local, containerized execution
+to ensure environment consistency and reproducible builds.
+</p>
+
+<ul>
+  <li>A multi-stage Docker build was used locally</li>
+  <li>The Dockerfile is intentionally not committed to this repository</li>
+  <li>Docker was used strictly for development and testing purposes</li>
+</ul>
+
+<p>
+This approach keeps the repository clean while still validating Docker-based
+deployment.
+</p>
+
+<hr/>
+
+<h2>📁 Project Structure</h2>
+<pre><code>Build_your_own_Shell/
+├── app/
+│   └── main.go
+├── go.mod
+├── go.sum
+├── README.md
+└── your_program.sh
+</code></pre>
+
+<hr/>
+
+<h2>🧠 Notes</h2>
+<ul>
+  <li>This project focuses on understanding shell internals and process handling</li>
+  <li>It is designed for learning purposes and system-level programming practice</li>
+</ul>
+
+<hr/>
+
+<h2>📜 License</h2>
+<p>
+This project is intended for educational use.
+</p>
+
+
 1. Ensure you have `go (1.25)` installed locally
 1. Run `./your_program.sh` to run your program, which is implemented in
    `app/main.go`.

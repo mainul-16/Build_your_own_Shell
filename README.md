@@ -126,7 +126,7 @@ deployment.
 
 <hr/>
 
-<h2>🧠 Notes</h2>
+<h2>🧠 Notes !!</h2>
 <ul>
   <li>This project focuses on understanding shell internals and process handling</li>
   <li>It is designed for learning purposes and system-level programming practice</li>
